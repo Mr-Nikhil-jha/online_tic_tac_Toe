@@ -157,9 +157,7 @@
         currentRoom = db.collection("games").doc(roomId);
         gameActive = true;
         resetBtn.style.display = "block";
-        document.getElementById(
-          "roomIdDisplay"
-        ).textContent = `Room ID: ${roomId}`; // Display Room ID
+        status.textContent = `Room ID: ${roomId}`; // Display Room ID
         currentRoom.onSnapshot((doc) => {
           const data = doc.data();
           if (!data) return;
