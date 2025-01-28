@@ -212,13 +212,28 @@
       }
       // Reset game
       async function resetGame() {
+        if (!currentRoom) return;
+
+        // Update Firestore with the reset game state
         await currentRoom.update({
           gameState: ["", "", "", "", "", "", "", "", ""],
           currentPlayer: "X",
           winner: null,
           status: "playing",
         });
+
+        // Reset local variables
+        gameState = ["", "", "", "", "", "", "", "", ""];
+        currentPlayer = "X";
         gameActive = true;
+
+        // Clear the board display
+        cells.forEach((cell) => {
+          cell.textContent = "";
+          cell.style.cursor = playerRole === "X" ? "pointer" : "not-allowed";
+        });
+
+        // Update status
         status.textContent = `Room ID: ${currentRoom.id} - Game reset!`;
       }
 
