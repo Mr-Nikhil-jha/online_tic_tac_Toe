@@ -36,6 +36,10 @@
         margin: 20px 0;
         font-size: 18px;
       }
+      .btnGroup {
+        display: flex;
+        column-gap: 2px;
+      }
       .reset-btn {
         display: block;
         margin: 0 auto;
@@ -59,6 +63,28 @@
         border-radius: 5px;
         border: 1px solid #333;
       }
+
+      @media (max-width: 768px) {
+        .room-controls {
+          display: grid;
+        }
+        .game-board {
+          margin-top: 4rem;
+        }
+        .btnGroup {
+          display: flex;
+          column-gap: 50px;
+        }
+
+        #createRoomBtn {
+          position: absolute;
+          left: 64 px;
+        }
+        #joinRoomBtn {
+          position: absolute;
+          right: 75px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -76,8 +102,10 @@
         class="room-id-input"
         placeholder="Enter Room ID"
       />
-      <button class="reset-btn" id="createRoomBtn">Create Room</button>
-      <button class="reset-btn" id="joinRoomBtn">Join Room</button>
+      <div class="btnGroup">
+        <button class="reset-btn" id="createRoomBtn">Create Room</button>
+        <button class="reset-btn" id="joinRoomBtn">Join Room</button>
+      </div>
     </div>
     <div class="game-board" id="board">
       <div class="cell" data-cell-index="0"></div>
@@ -155,8 +183,6 @@
       async function joinRoom() {
         const playerName = playerNameInput.value.trim();
         const roomId = roomIdInput.value.trim().toUpperCase();
-
-        // resetBtn.style.display = "none";
         if (!playerName || !roomId) {
           alert("Enter your name and room ID to join.");
           return;
@@ -190,6 +216,7 @@
 
           gameState = data.gameState;
           currentPlayer = data.currentPlayer;
+          gameActive = data.gameActive;
           opponentName =
             playerRole === "X" ? data.playerO : data.playerX || "Opponent";
           updateBoard();
@@ -215,7 +242,8 @@
           }`;
         }
         if (data.winner) {
-          status.textContent = `${data.winner} wins!`;
+          let name = data.winner == "X" ? data.playerX : data.playerO;
+          status.textContent = `${name} wins!`;
           gameActive = false;
         }
       }
@@ -281,51 +309,31 @@
         return null;
       }
 
-      function disableCellInteraction() {
-        cells.forEach(cell => {
-          cell.style.pointerEvents = 'none'; // Disable clicking on cells
-        });
-      }
-
-      function enableCellInteraction() {
-        cells.forEach(cell => {
-          cell.style.pointerEvents = 'auto'; // Enable clicking on cells
-        });
-      }
-
       async function resetGame() {
-        if (!gameActive) return;
+        if (!currentRoom) return;
 
-        // Reset the game state
+        // Update Firestore with the reset game state
         await currentRoom.update({
           gameState: ["", "", "", "", "", "", "", "", ""],
-          currentPlayer: "X", // Reset to player X's turn
+          currentPlayer: "X",
           winner: null,
-          gameActive: true,
-          status: "waiting",
+          status: "playing",
+          gameActive: true, // Add gameActive to Firestore
         });
 
-        // Mark who initiated the reset
-        resetInitiator = playerNameInput.value.trim();
+        // Clear the board display immediately
+        cells.forEach((cell) => {
+          cell.textContent = "";
+          cell.style.cursor = playerRole === "X" ? "pointer" : "not-allowed";
+        });
 
-        // Disable cell interaction for the other player
-        disableCellInteraction();
-
-        // Update the UI for reset status
-        status.textContent = "Game reset. Waiting for opponent...";
-        resetBtn.style.display = "none";
+        // Status message for resetting player
+        status.textContent = `Room ID: ${currentRoom.id} - Game reset!`;
       }
 
       createRoomBtn.addEventListener("click", createRoom);
       joinRoomBtn.addEventListener("click", joinRoom);
-      resetBtn.addEventListener("click", async () => {
-        await resetGame();
-
-        // Enable the other player's interaction if they're allowed
-        if (resetInitiator !== playerNameInput.value.trim()) {
-          enableCellInteraction();
-        }
-      });
+      resetBtn.addEventListener("click", resetGame);
       cells.forEach((cell) => cell.addEventListener("click", handleCellClick));
     </script>
   </body>
