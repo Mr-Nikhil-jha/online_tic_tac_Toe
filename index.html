@@ -1,46 +1,332 @@
-let resetInitiator = null; // Keep track of who initiated the reset
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Online Tic Tac Toe</title>
+    <!-- Add Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <style>
+      /* CSS Styles */
+      .game-title {
+        text-align: center;
+        color: #333;
+      }
+      .game-board {
+        display: grid;
+        grid-template-columns: repeat(3, 100px);
+        grid-gap: 5px;
+        margin: 20px auto;
+        width: 310px;
+      }
+      .cell {
+        width: 100px;
+        height: 100px;
+        background-color: #fff;
+        border: 2px solid #333;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+      }
+      .status {
+        text-align: center;
+        margin: 20px 0;
+        font-size: 18px;
+      }
+      .reset-btn {
+        display: block;
+        margin: 0 auto;
+        padding: 10px 20px;
+        background-color: #333;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      .room-controls {
+        margin: 20px 0;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+      }
+      .room-id-input,
+      .player-name-input {
+        padding: 8px;
+        width: 200px;
+        border-radius: 5px;
+        border: 1px solid #333;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 class="game-title">Online Tic Tac Toe</h1>
+    <div class="room-controls">
+      <input
+        type="text"
+        id="playerNameInput"
+        class="player-name-input"
+        placeholder="Enter Your Name"
+      />
+      <input
+        type="text"
+        id="roomIdInput"
+        class="room-id-input"
+        placeholder="Enter Room ID"
+      />
+      <button class="reset-btn" id="createRoomBtn">Create Room</button>
+      <button class="reset-btn" id="joinRoomBtn">Join Room</button>
+    </div>
+    <div class="game-board" id="board">
+      <div class="cell" data-cell-index="0"></div>
+      <div class="cell" data-cell-index="1"></div>
+      <div class="cell" data-cell-index="2"></div>
+      <div class="cell" data-cell-index="3"></div>
+      <div class="cell" data-cell-index="4"></div>
+      <div class="cell" data-cell-index="5"></div>
+      <div class="cell" data-cell-index="6"></div>
+      <div class="cell" data-cell-index="7"></div>
+      <div class="cell" data-cell-index="8"></div>
+    </div>
+    <div class="status" id="status">Create or join a room to start</div>
+    <button class="reset-btn" id="resetBtn" style="display: none">
+      Reset Game
+    </button>
+    <script>
+      const firebaseConfig = {
+        apiKey: "AIzaSyAVAmm17IuUzHVSlRoifBbkUR1M6NcvfbU",
+        authDomain: "tictactoe-30c55.firebaseapp.com",
+        projectId: "tictactoe-30c55",
+        storageBucket: "tictactoe-30c55.firebasestorage.app",
+        messagingSenderId: "1082947450155",
+        appId: "1:1082947450155:web:bea75a105a56dbc89f816e",
+        measurementId: "G-48VYS0G4W6",
+      };
 
-async function resetGame() {
-  if (!gameActive) return;
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
 
-  // Reset the game state
-  await currentRoom.update({
-    gameState: ["", "", "", "", "", "", "", "", ""],
-    currentPlayer: "X", // Reset to player X's turn
-    winner: null,
-    gameActive: true,
-    status: "waiting",
-  });
+      let currentRoom = null;
+      let playerRole = null;
+      let currentPlayer = "X";
+      let gameActive = false;
+      let gameState = ["", "", "", "", "", "", "", "", ""];
+      let opponentName = null;
+      let connectionTimer;
+      let resetInitiator = null; // Track who initiated the reset
 
-  // Mark who initiated the reset
-  resetInitiator = playerNameInput.value.trim();
+      const playerNameInput = document.getElementById("playerNameInput");
+      const roomIdInput = document.getElementById("roomIdInput");
+      const createRoomBtn = document.getElementById("createRoomBtn");
+      const joinRoomBtn = document.getElementById("joinRoomBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const cells = document.querySelectorAll(".cell");
+      const status = document.getElementById("status");
 
-  // Disable cell interaction for the other player
-  disableCellInteraction();
+      async function createRoom() {
+        const playerName = playerNameInput.value.trim();
+        if (!playerName) {
+          alert("Enter your name to create a room.");
+          return;
+        }
+        const roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
+        playerRole = "X";
+        currentPlayer = "X";
+        await db
+          .collection("games")
+          .doc(roomId)
+          .set({
+            gameState: ["", "", "", "", "", "", "", "", ""],
+            currentPlayer: "X",
+            status: "waiting",
+            winner: null,
+            playerX: playerName,
+            playerO: null,
+            gameActive: true,
+          });
+        setupRoom(roomId, playerName);
+        status.textContent = `Room ID: ${roomId} - Waiting for opponent...`;
+        startConnectionTimer(roomId);
+        roomIdInput.value = roomId;
+      }
 
-  // Update the UI for reset status
-  status.textContent = "Game reset. Waiting for opponent...";
-  resetBtn.style.display = "none";
-}
+      async function joinRoom() {
+        const playerName = playerNameInput.value.trim();
+        const roomId = roomIdInput.value.trim().toUpperCase();
 
-function disableCellInteraction() {
-  cells.forEach(cell => {
-    cell.style.pointerEvents = 'none'; // Disable clicking on cells
-  });
-}
+        // resetBtn.style.display = "none";
+        if (!playerName || !roomId) {
+          alert("Enter your name and room ID to join.");
+          return;
+        }
+        const roomRef = db.collection("games").doc(roomId);
+        const doc = await roomRef.get();
+        if (!doc.exists) {
+          status.textContent = "Room not found!";
+          return;
+        }
+        const data = doc.data();
+        if (data.status === "playing") {
+          status.textContent = "Room is already full!";
+          return;
+        }
+        playerRole = "O";
+        await roomRef.update({
+          playerO: playerName,
+          status: "playing",
+        });
+        setupRoom(roomId, playerName);
+      }
 
-function enableCellInteraction() {
-  cells.forEach(cell => {
-    cell.style.pointerEvents = 'auto'; // Enable clicking on cells
-  });
-}
+      function setupRoom(roomId, playerName) {
+        currentRoom = db.collection("games").doc(roomId);
+        gameActive = true;
+        resetBtn.style.display = "block";
+        currentRoom.onSnapshot((doc) => {
+          const data = doc.data();
+          if (!data) return;
 
-// Modify the reset button's behavior
-resetBtn.addEventListener("click", async () => {
-  await resetGame();
+          gameState = data.gameState;
+          currentPlayer = data.currentPlayer;
+          opponentName =
+            playerRole === "X" ? data.playerO : data.playerX || "Opponent";
+          updateBoard();
+          updateStatus(data);
+        });
+      }
 
-  // Enable the other player's interaction if they're allowed
-  if (resetInitiator !== playerNameInput.value.trim()) {
-    enableCellInteraction();
-  }
-});
+      function updateBoard() {
+        cells.forEach((cell, index) => {
+          cell.textContent = gameState[index];
+        });
+      }
+
+      function updateStatus(data) {
+        if (data.status === "waiting") {
+          status.textContent = `Waiting for opponent...`;
+        } else if (data.status === "playing") {
+          clearTimeout(connectionTimer); // Stop the timer when opponent joins
+          status.textContent = `Connected to ${opponentName}! ${
+            currentPlayer === playerRole
+              ? "Your turn"
+              : `${opponentName}'s turn`
+          }`;
+        }
+        if (data.winner) {
+          status.textContent = `${data.winner} wins!`;
+          gameActive = false;
+        }
+      }
+
+      function startConnectionTimer(roomId) {
+        let timer = 60; // 1 minute
+        connectionTimer = setInterval(async () => {
+          if (timer <= 0) {
+            clearInterval(connectionTimer);
+            await db.collection("games").doc(roomId).delete();
+            status.textContent = "Opponent did not join. Room reset!";
+            resetBtn.style.display = "none";
+            roomIdInput.value = ""; // Clear the room ID input
+            status.textContent = "Create or join a room to start";
+          } else {
+            status.textContent = `Waiting for opponent... ${timer--}s`;
+          }
+        }, 1000);
+      }
+
+      async function handleCellClick(e) {
+        if (!gameActive || currentPlayer !== playerRole) return;
+        const cellIndex = parseInt(e.target.getAttribute("data-cell-index"));
+        if (gameState[cellIndex] !== "") return;
+
+        const newGameState = [...gameState];
+        newGameState[cellIndex] = playerRole;
+
+        const winner = checkWinner(newGameState);
+        await currentRoom.update({
+          gameState: newGameState,
+          currentPlayer: currentPlayer === "X" ? "O" : "X",
+          winner: winner,
+        });
+
+        if (winner) {
+          gameActive = false; // Stop the game if there's a winner
+        }
+      }
+
+      function checkWinner(gameState) {
+        const winningCombinations = [
+          [0, 1, 2],
+          [3, 4, 5],
+          [6, 7, 8], // Rows
+          [0, 3, 6],
+          [1, 4, 7],
+          [2, 5, 8], // Columns
+          [0, 4, 8],
+          [2, 4, 6], // Diagonals
+        ];
+        for (const combo of winningCombinations) {
+          const [a, b, c] = combo;
+          if (
+            gameState[a] &&
+            gameState[a] === gameState[b] &&
+            gameState[a] === gameState[c]
+          ) {
+            return gameState[a]; // Returns 'X' or 'O' as the winner
+          }
+        }
+        if (!gameState.includes("")) return "draw"; // All cells filled, it's a draw
+        return null;
+      }
+
+      function disableCellInteraction() {
+        cells.forEach(cell => {
+          cell.style.pointerEvents = 'none'; // Disable clicking on cells
+        });
+      }
+
+      function enableCellInteraction() {
+        cells.forEach(cell => {
+          cell.style.pointerEvents = 'auto'; // Enable clicking on cells
+        });
+      }
+
+      async function resetGame() {
+        if (!gameActive) return;
+
+        // Reset the game state
+        await currentRoom.update({
+          gameState: ["", "", "", "", "", "", "", "", ""],
+          currentPlayer: "X", // Reset to player X's turn
+          winner: null,
+          gameActive: true,
+          status: "waiting",
+        });
+
+        // Mark who initiated the reset
+        resetInitiator = playerNameInput.value.trim();
+
+        // Disable cell interaction for the other player
+        disableCellInteraction();
+
+        // Update the UI for reset status
+        status.textContent = "Game reset. Waiting for opponent...";
+        resetBtn.style.display = "none";
+      }
+
+      createRoomBtn.addEventListener("click", createRoom);
+      joinRoomBtn.addEventListener("click", joinRoom);
+      resetBtn.addEventListener("click", async () => {
+        await resetGame();
+
+        // Enable the other player's interaction if they're allowed
+        if (resetInitiator !== playerNameInput.value.trim()) {
+          enableCellInteraction();
+        }
+      });
+      cells.forEach((cell) => cell.addEventListener("click", handleCellClick));
+    </script>
+  </body>
+</html>
