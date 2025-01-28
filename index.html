@@ -126,13 +126,14 @@
           .set({
             gameState: ["", "", "", "", "", "", "", "", ""],
             currentPlayer: "X",
-            status: "waiting",
+            status: "waiting", // Room is waiting for the second player
             winner: null,
           });
         setupRoom(roomId);
         status.textContent = `Room ID: ${roomId} - Waiting for player...`;
+        roomIdInput.value = roomId; // Display the Room ID in the input field
       }
-      // Join existing room
+
       async function joinRoom() {
         const roomId = roomIdInput.value.trim().toUpperCase();
         const roomRef = db.collection("games").doc(roomId);
@@ -148,13 +149,17 @@
         }
         playerRole = "O";
         setupRoom(roomId);
-        await roomRef.update({ status: "playing" });
+        await roomRef.update({ status: "playing" }); // Update status to "playing" when the second player joins
+        status.textContent = `Room ID: ${roomId} - Game started!`;
       }
       // Setup real-time listener for game state
       function setupRoom(roomId) {
         currentRoom = db.collection("games").doc(roomId);
         gameActive = true;
         resetBtn.style.display = "block";
+        document.getElementById(
+          "roomIdDisplay"
+        ).textContent = `Room ID: ${roomId}`; // Display Room ID
         currentRoom.onSnapshot((doc) => {
           const data = doc.data();
           if (!data) return;
@@ -162,7 +167,6 @@
           currentPlayer = data.currentPlayer;
           updateBoard();
           updateStatus(data);
-          // Update cell cursors
           cells.forEach((cell) => {
             const index = parseInt(cell.getAttribute("data-cell-index"));
             cell.style.cursor =
@@ -177,13 +181,17 @@
         if (!gameActive || currentPlayer !== playerRole) return;
         const cellIndex = parseInt(e.target.getAttribute("data-cell-index"));
         if (gameState[cellIndex] !== "") return;
-        // Create a new array with the updated cell
         const newGameState = [...gameState];
         newGameState[cellIndex] = playerRole;
+        const winner = checkWinner();
         await currentRoom.update({
           gameState: newGameState,
           currentPlayer: currentPlayer === "X" ? "O" : "X",
+          winner: winner, // Update the winner in Firestore
         });
+        if (winner) {
+          gameActive = false; // Stop the game if there's a winner or draw
+        }
       }
       // Update board display
       function updateBoard() {
@@ -198,7 +206,7 @@
             data.winner === "draw"
               ? "Game ended in a draw!"
               : `Player ${data.winner} wins!`;
-          gameActive = false;
+          gameActive = false; // Stop the game
         } else {
           status.textContent =
             currentPlayer === playerRole ? "Your turn" : "Opponent's turn";
@@ -213,6 +221,32 @@
           status: "playing",
         });
         gameActive = true;
+        status.textContent = `Room ID: ${currentRoom.id} - Game reset!`;
+      }
+
+      function checkWinner() {
+        const winningCombinations = [
+          [0, 1, 2],
+          [3, 4, 5],
+          [6, 7, 8], // Rows
+          [0, 3, 6],
+          [1, 4, 7],
+          [2, 5, 8], // Columns
+          [0, 4, 8],
+          [2, 4, 6], // Diagonals
+        ];
+        for (const combo of winningCombinations) {
+          const [a, b, c] = combo;
+          if (
+            gameState[a] &&
+            gameState[a] === gameState[b] &&
+            gameState[a] === gameState[c]
+          ) {
+            return gameState[a]; // Returns 'X' or 'O' as the winner
+          }
+        }
+        if (!gameState.includes("")) return "draw"; // All cells filled, it's a draw
+        return null; // No winner yet
       }
       // Event listeners
       createRoomBtn.addEventListener("click", createRoom);
