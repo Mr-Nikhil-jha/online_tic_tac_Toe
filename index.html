@@ -206,6 +206,10 @@
             currentPlayer === playerRole ? "Your turn" : `${opponentName}'s turn`
           }`;
         }
+        if (data.winner) {
+          status.textContent = `${data.winner} wins!`;
+          gameActive = false;
+        }
       }
 
       function startConnectionTimer(roomId) {
@@ -222,6 +226,51 @@
         }, 1000);
       }
 
+      async function handleCellClick(e) {
+        if (!gameActive || currentPlayer !== playerRole) return;
+        const cellIndex = parseInt(e.target.getAttribute("data-cell-index"));
+        if (gameState[cellIndex] !== "") return;
+
+        const newGameState = [...gameState];
+        newGameState[cellIndex] = playerRole;
+
+        const winner = checkWinner(newGameState);
+        await currentRoom.update({
+          gameState: newGameState,
+          currentPlayer: currentPlayer === "X" ? "O" : "X",
+          winner: winner,
+        });
+
+        if (winner) {
+          gameActive = false; // Stop the game if there's a winner
+        }
+      }
+
+      function checkWinner(gameState) {
+        const winningCombinations = [
+          [0, 1, 2],
+          [3, 4, 5],
+          [6, 7, 8], // Rows
+          [0, 3, 6],
+          [1, 4, 7],
+          [2, 5, 8], // Columns
+          [0, 4, 8],
+          [2, 4, 6], // Diagonals
+        ];
+        for (const combo of winningCombinations) {
+          const [a, b, c] = combo;
+          if (
+            gameState[a] &&
+            gameState[a] === gameState[b] &&
+            gameState[a] === gameState[c]
+          ) {
+            return gameState[a]; // Returns 'X' or 'O' as the winner
+          }
+        }
+        if (!gameState.includes("")) return "draw"; // All cells filled, it's a draw
+        return null;
+      }
+
       createRoomBtn.addEventListener("click", createRoom);
       joinRoomBtn.addEventListener("click", joinRoom);
       resetBtn.addEventListener("click", () => {
@@ -234,19 +283,7 @@
           });
         }
       });
-      cells.forEach((cell) =>
-        cell.addEventListener("click", async (e) => {
-          if (!gameActive || currentPlayer !== playerRole) return;
-          const cellIndex = parseInt(e.target.getAttribute("data-cell-index"));
-          if (gameState[cellIndex] !== "") return;
-          const newGameState = [...gameState];
-          newGameState[cellIndex] = playerRole;
-          await currentRoom.update({
-            gameState: newGameState,
-            currentPlayer: currentPlayer === "X" ? "O" : "X",
-          });
-        })
-      );
+      cells.forEach((cell) => cell.addEventListener("click", handleCellClick));
     </script>
   </body>
 </html>
