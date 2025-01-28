@@ -133,15 +133,18 @@
         const roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
         playerRole = "X";
         currentPlayer = "X";
-        await db.collection("games").doc(roomId).set({
-          gameState: ["", "", "", "", "", "", "", "", ""],
-          currentPlayer: "X",
-          status: "waiting",
-          winner: null,
-          playerX: playerName,
-          playerO: null,
-          gameActive: true,
-        });
+        await db
+          .collection("games")
+          .doc(roomId)
+          .set({
+            gameState: ["", "", "", "", "", "", "", "", ""],
+            currentPlayer: "X",
+            status: "waiting",
+            winner: null,
+            playerX: playerName,
+            playerO: null,
+            gameActive: true,
+          });
         setupRoom(roomId, playerName);
         status.textContent = `Room ID: ${roomId} - Waiting for opponent...`;
         startConnectionTimer(roomId);
@@ -203,7 +206,9 @@
         } else if (data.status === "playing") {
           clearTimeout(connectionTimer); // Stop the timer when opponent joins
           status.textContent = `Connected to ${opponentName}! ${
-            currentPlayer === playerRole ? "Your turn" : `${opponentName}'s turn`
+            currentPlayer === playerRole
+              ? "Your turn"
+              : `${opponentName}'s turn`
           }`;
         }
         if (data.winner) {
@@ -220,6 +225,8 @@
             await db.collection("games").doc(roomId).delete();
             status.textContent = "Opponent did not join. Room reset!";
             resetBtn.style.display = "none";
+            roomIdInput.value = ""; // Clear the room ID input
+            status.textContent = "Create or join a room to start";
           } else {
             status.textContent = `Waiting for opponent... ${timer--}s`;
           }
@@ -279,6 +286,7 @@
             gameState: ["", "", "", "", "", "", "", "", ""],
             currentPlayer: "X",
             winner: null,
+            gameActive: true,
             status: "playing",
           });
         }
