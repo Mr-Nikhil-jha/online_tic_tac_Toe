@@ -155,25 +155,34 @@
       // Setup real-time listener for game state
       function setupRoom(roomId) {
         currentRoom = db.collection("games").doc(roomId);
-        gameActive = true;
+        gameActive = true; // Assume game starts active
         resetBtn.style.display = "block";
         status.textContent = `Room ID: ${roomId}`; // Display Room ID
+
         currentRoom.onSnapshot((doc) => {
           const data = doc.data();
           if (!data) return;
+
+          // Update local variables based on Firestore data
           gameState = data.gameState;
           currentPlayer = data.currentPlayer;
+          gameActive = data.gameActive; // Synchronize gameActive state
           updateBoard();
           updateStatus(data);
+
+          // Update cell interactivity
           cells.forEach((cell) => {
             const index = parseInt(cell.getAttribute("data-cell-index"));
             cell.style.cursor =
-              currentPlayer === playerRole && gameState[index] === ""
+              gameActive &&
+              currentPlayer === playerRole &&
+              gameState[index] === ""
                 ? "pointer"
                 : "not-allowed";
           });
         });
       }
+
       // Handle cell click
       async function handleCellClick(e) {
         if (!gameActive || currentPlayer !== playerRole) return;
@@ -220,20 +229,16 @@
           currentPlayer: "X",
           winner: null,
           status: "playing",
+          gameActive: true, // Add gameActive to Firestore
         });
 
-        // Reset local variables
-        gameState = ["", "", "", "", "", "", "", "", ""];
-        currentPlayer = "X";
-        gameActive = true;
-
-        // Clear the board display
+        // Clear the board display immediately
         cells.forEach((cell) => {
           cell.textContent = "";
           cell.style.cursor = playerRole === "X" ? "pointer" : "not-allowed";
         });
 
-        // Update status
+        // Status message for resetting player
         status.textContent = `Room ID: ${currentRoom.id} - Game reset!`;
       }
 
