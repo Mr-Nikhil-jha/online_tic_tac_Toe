@@ -278,19 +278,20 @@
         return null;
       }
 
+        async function resetGame() {
+        await currentRoom.update({
+          gameState: ["", "", "", "", "", "", "", "", ""],
+          currentPlayer: "X",
+          winner: null,
+          gameActive: true,
+        });
+        gameActive = true;
+        status.textContent = `Room ID: ${currentRoom.id} - Game reset!`;
+      }
+
       createRoomBtn.addEventListener("click", createRoom);
       joinRoomBtn.addEventListener("click", joinRoom);
-      resetBtn.addEventListener("click", () => {
-        if (currentRoom) {
-          currentRoom.update({
-            gameState: ["", "", "", "", "", "", "", "", ""],
-            currentPlayer: "X",
-            winner: null,
-            gameActive: true,
-            status: "playing",
-          });
-        }
-      });
+   resetBtn.addEventListener("click", resetGame);
       cells.forEach((cell) => cell.addEventListener("click", handleCellClick));
     </script>
   </body>
