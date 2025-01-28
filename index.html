@@ -181,7 +181,7 @@
         if (gameState[cellIndex] !== "") return;
         const newGameState = [...gameState];
         newGameState[cellIndex] = playerRole;
-        const winner = checkWinner();
+        const winner = checkWinner(newGameState);
         await currentRoom.update({
           gameState: newGameState,
           currentPlayer: currentPlayer === "X" ? "O" : "X",
@@ -222,7 +222,7 @@
         status.textContent = `Room ID: ${currentRoom.id} - Game reset!`;
       }
 
-      function checkWinner() {
+      function checkWinner(gameState) {
         const winningCombinations = [
           [0, 1, 2],
           [3, 4, 5],
