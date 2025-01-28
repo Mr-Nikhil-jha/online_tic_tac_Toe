@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Online Tic Tac Toe</title>
+    <!-- Add Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <style>
+      /* CSS Styles */
+      .game-title {
+        text-align: center;
+        color: #333;
+      }
+      .game-board {
+        display: grid;
+        grid-template-columns: repeat(3, 100px);
+        grid-gap: 5px;
+        margin: 20px auto;
+        width: 310px;
+      }
+      .cell {
+        width: 100px;
+        height: 100px;
+        background-color: #fff;
+        border: 2px solid #333;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+      }
+      .status {
+        text-align: center;
+        margin: 20px 0;
+        font-size: 18px;
+      }
+      .reset-btn {
+        display: block;
+        margin: 0 auto;
+        padding: 10px 20px;
+        background-color: #333;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      .room-controls {
+        margin: 20px 0;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+      }
+      .room-id-input {
+        padding: 8px;
+        width: 200px;
+        border-radius: 5px;
+        border: 1px solid #333;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 class="game-title">Online Tic Tac Toe</h1>
+    <div class="room-controls">
+      <input
+        type="text"
+        id="roomIdInput"
+        class="room-id-input"
+        placeholder="Enter Room ID"
+      />
+      <button class="reset-btn" id="createRoomBtn">Create Room</button>
+      <button class="reset-btn" id="joinRoomBtn">Join Room</button>
+    </div>
+    <div class="game-board" id="board">
+      <!-- Added Cells -->
+      <div class="cell" data-cell-index="0"></div>
+      <div class="cell" data-cell-index="1"></div>
+      <div class="cell" data-cell-index="2"></div>
+      <div class="cell" data-cell-index="3"></div>
+      <div class="cell" data-cell-index="4"></div>
+      <div class="cell" data-cell-index="5"></div>
+      <div class="cell" data-cell-index="6"></div>
+      <div class="cell" data-cell-index="7"></div>
+      <div class="cell" data-cell-index="8"></div>
+    </div>
+    <div class="status" id="status">Create or join a room to start</div>
+    <button class="reset-btn" id="resetBtn" style="display: none">
+      Reset Game
+    </button>
+    <script>
+      // Firebase configuration
+      const firebaseConfig = {
+        apiKey: "AIzaSyAVAmm17IuUzHVSlRoifBbkUR1M6NcvfbU",
+        authDomain: "tictactoe-30c55.firebaseapp.com",
+        projectId: "tictactoe-30c55",
+        storageBucket: "tictactoe-30c55.firebasestorage.app",
+        messagingSenderId: "1082947450155",
+        appId: "1:1082947450155:web:bea75a105a56dbc89f816e",
+        measurementId: "G-48VYS0G4W6",
+      };
+      // Initialize Firebase
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+      // Game variables
+      let currentRoom = null;
+      let playerRole = null;
+      let currentPlayer = "X";
+      let gameActive = false;
+      let gameState = ["", "", "", "", "", "", "", "", ""];
+      // DOM elements
+      const roomIdInput = document.getElementById("roomIdInput");
+      const createRoomBtn = document.getElementById("createRoomBtn");
+      const joinRoomBtn = document.getElementById("joinRoomBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const cells = document.querySelectorAll(".cell");
+      const status = document.getElementById("status");
+      // Create new game room
+      async function createRoom() {
+        const roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
+        playerRole = "X";
+        currentPlayer = "X";
+        await db
+          .collection("games")
+          .doc(roomId)
+          .set({
+            gameState: ["", "", "", "", "", "", "", "", ""],
+            currentPlayer: "X",
+            status: "waiting",
+            winner: null,
+          });
+        setupRoom(roomId);
+        status.textContent = `Room ID: ${roomId} - Waiting for player...`;
+      }
+      // Join existing room
+      async function joinRoom() {
+        const roomId = roomIdInput.value.trim().toUpperCase();
+        const roomRef = db.collection("games").doc(roomId);
+        const doc = await roomRef.get();
+        if (!doc.exists) {
+          status.textContent = "Room not found!";
+          return;
+        }
+        const data = doc.data();
+        if (data.status === "playing") {
+          status.textContent = "Room is already full!";
+          return;
+        }
+        playerRole = "O";
+        setupRoom(roomId);
+        await roomRef.update({ status: "playing" });
+      }
+      // Setup real-time listener for game state
+      function setupRoom(roomId) {
+        currentRoom = db.collection("games").doc(roomId);
+        gameActive = true;
+        resetBtn.style.display = "block";
+        currentRoom.onSnapshot((doc) => {
+          const data = doc.data();
+          if (!data) return;
+          gameState = data.gameState;
+          currentPlayer = data.currentPlayer;
+          updateBoard();
+          updateStatus(data);
+          // Update cell cursors
+          cells.forEach((cell) => {
+            const index = parseInt(cell.getAttribute("data-cell-index"));
+            cell.style.cursor =
+              currentPlayer === playerRole && gameState[index] === ""
+                ? "pointer"
+                : "not-allowed";
+          });
+        });
+      }
+      // Handle cell click
+      async function handleCellClick(e) {
+        if (!gameActive || currentPlayer !== playerRole) return;
+        const cellIndex = parseInt(e.target.getAttribute("data-cell-index"));
+        if (gameState[cellIndex] !== "") return;
+        // Create a new array with the updated cell
+        const newGameState = [...gameState];
+        newGameState[cellIndex] = playerRole;
+        await currentRoom.update({
+          gameState: newGameState,
+          currentPlayer: currentPlayer === "X" ? "O" : "X",
+        });
+      }
+      // Update board display
+      function updateBoard() {
+        cells.forEach((cell, index) => {
+          cell.textContent = gameState[index];
+        });
+      }
+      // Update game status
+      function updateStatus(data) {
+        if (data.winner) {
+          status.textContent =
+            data.winner === "draw"
+              ? "Game ended in a draw!"
+              : `Player ${data.winner} wins!`;
+          gameActive = false;
+        } else {
+          status.textContent =
+            currentPlayer === playerRole ? "Your turn" : "Opponent's turn";
+        }
+      }
+      // Reset game
+      async function resetGame() {
+        await currentRoom.update({
+          gameState: ["", "", "", "", "", "", "", "", ""],
+          currentPlayer: "X",
+          winner: null,
+          status: "playing",
+        });
+        gameActive = true;
+      }
+      // Event listeners
+      createRoomBtn.addEventListener("click", createRoom);
+      joinRoomBtn.addEventListener("click", joinRoom);
+      resetBtn.addEventListener("click", resetGame);
+      cells.forEach((cell) => cell.addEventListener("click", handleCellClick));
+    </script>
+  </body>
+</html>
