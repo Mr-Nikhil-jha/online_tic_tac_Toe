@@ -65,15 +65,21 @@
     <div class="room-controls">
       <input
         type="text"
+        id="playerNameInput"
+        class="room-id-input"
+        placeholder="Enter Your Name"
+      />
+      <input
+        type="text"
         id="roomIdInput"
         class="room-id-input"
-        placeholder="Enter Room ID"
+        placeholder="Your Room ID"
+        disabled
       />
       <button class="reset-btn" id="createRoomBtn">Create Room</button>
       <button class="reset-btn" id="joinRoomBtn">Join Room</button>
     </div>
     <div class="game-board" id="board">
-      <!-- Added Cells -->
       <div class="cell" data-cell-index="0"></div>
       <div class="cell" data-cell-index="1"></div>
       <div class="cell" data-cell-index="2"></div>
@@ -99,24 +105,29 @@
         appId: "1:1082947450155:web:bea75a105a56dbc89f816e",
         measurementId: "G-48VYS0G4W6",
       };
-      // Initialize Firebase
       firebase.initializeApp(firebaseConfig);
       const db = firebase.firestore();
-      // Game variables
+
       let currentRoom = null;
       let playerRole = null;
       let currentPlayer = "X";
       let gameActive = false;
       let gameState = ["", "", "", "", "", "", "", "", ""];
-      // DOM elements
+
       const roomIdInput = document.getElementById("roomIdInput");
+      const playerNameInput = document.getElementById("playerNameInput");
       const createRoomBtn = document.getElementById("createRoomBtn");
       const joinRoomBtn = document.getElementById("joinRoomBtn");
       const resetBtn = document.getElementById("resetBtn");
       const cells = document.querySelectorAll(".cell");
       const status = document.getElementById("status");
-      // Create new game room
+
       async function createRoom() {
+        const playerName = playerNameInput.value.trim();
+        if (!playerName) {
+          status.textContent = "Please enter your name to create a room.";
+          return;
+        }
         const roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
         playerRole = "X";
         currentPlayer = "X";
@@ -126,17 +137,24 @@
           .set({
             gameState: ["", "", "", "", "", "", "", "", ""],
             currentPlayer: "X",
-            status: "waiting", // Room is waiting for the second player
+            status: "waiting",
             winner: null,
             gameActive: true,
+            playerX: playerName,
+            playerO: null,
           });
         setupRoom(roomId);
         status.textContent = `Room ID: ${roomId} - Waiting for player...`;
-        roomIdInput.value = roomId; // Display the Room ID in the input field
+        roomIdInput.value = roomId;
       }
 
       async function joinRoom() {
         const roomId = roomIdInput.value.trim().toUpperCase();
+        const playerName = playerNameInput.value.trim();
+        if (!playerName) {
+          status.textContent = "Please enter your name to join a room.";
+          return;
+        }
         const roomRef = db.collection("games").doc(roomId);
         const doc = await roomRef.get();
         if (!doc.exists) {
@@ -150,28 +168,23 @@
         }
         playerRole = "O";
         setupRoom(roomId);
-        await roomRef.update({ status: "playing" }); // Update status to "playing" when the second player joins
+        await roomRef.update({ status: "playing", playerO: playerName });
         status.textContent = `Room ID: ${roomId} - Game started!`;
       }
-      // Setup real-time listener for game state
+
       function setupRoom(roomId) {
         currentRoom = db.collection("games").doc(roomId);
-        gameActive = true; // Assume game starts active
+        gameActive = true;
         resetBtn.style.display = "block";
-        status.textContent = `Room ID: ${roomId}`; // Display Room ID
-
+        status.textContent = `Room ID: ${roomId}`;
         currentRoom.onSnapshot((doc) => {
           const data = doc.data();
           if (!data) return;
-
-          // Update local variables based on Firestore data
           gameState = data.gameState;
           currentPlayer = data.currentPlayer;
-          gameActive = data.gameActive; // Synchronize gameActive state
+          gameActive = data.gameActive !== undefined ? data.gameActive : false;
           updateBoard();
           updateStatus(data);
-
-          // Update cell interactivity
           cells.forEach((cell) => {
             const index = parseInt(cell.getAttribute("data-cell-index"));
             cell.style.cursor =
@@ -184,7 +197,6 @@
         });
       }
 
-      // Handle cell click
       async function handleCellClick(e) {
         if (!gameActive || currentPlayer !== playerRole) return;
         const cellIndex = parseInt(e.target.getAttribute("data-cell-index"));
@@ -195,51 +207,47 @@
         await currentRoom.update({
           gameState: newGameState,
           currentPlayer: currentPlayer === "X" ? "O" : "X",
-          winner: winner, // Update the winner in Firestore
+          winner: winner,
         });
-        if (winner) {
-          gameActive = false; // Stop the game if there's a winner or draw
-        }
+        if (winner) gameActive = false;
       }
-      // Update board display
+
       function updateBoard() {
         cells.forEach((cell, index) => {
           cell.textContent = gameState[index];
         });
       }
-      // Update game status
+
       function updateStatus(data) {
+        const playerXName = data.playerX || "Player X";
+        const playerOName = data.playerO || "Player O";
+
         if (data.winner) {
           status.textContent =
             data.winner === "draw"
               ? "Game ended in a draw!"
-              : `Player ${data.winner} wins!`;
-          gameActive = false; // Stop the game
+              : `Player ${
+                  data.winner === "X" ? playerXName : playerOName
+                } wins!`;
+          gameActive = false;
         } else {
           status.textContent =
-            currentPlayer === playerRole ? "Your turn" : "Opponent's turn";
+            currentPlayer === playerRole
+              ? `Your turn (${playerRole === "X" ? playerXName : playerOName})`
+              : `Opponent's turn (${
+                  currentPlayer === "X" ? playerXName : playerOName
+                })`;
         }
       }
-      // Reset game
-      async function resetGame() {
-        if (!currentRoom) return;
 
-        // Update Firestore with the reset game state
+      async function resetGame() {
         await currentRoom.update({
           gameState: ["", "", "", "", "", "", "", "", ""],
           currentPlayer: "X",
           winner: null,
-          status: "playing",
-          gameActive: true, // Add gameActive to Firestore
+          gameActive: true,
         });
-
-        // Clear the board display immediately
-        cells.forEach((cell) => {
-          cell.textContent = "";
-          cell.style.cursor = playerRole === "X" ? "pointer" : "not-allowed";
-        });
-
-        // Status message for resetting player
+        gameActive = true;
         status.textContent = `Room ID: ${currentRoom.id} - Game reset!`;
       }
 
@@ -247,12 +255,12 @@
         const winningCombinations = [
           [0, 1, 2],
           [3, 4, 5],
-          [6, 7, 8], // Rows
+          [6, 7, 8],
           [0, 3, 6],
           [1, 4, 7],
-          [2, 5, 8], // Columns
+          [2, 5, 8],
           [0, 4, 8],
-          [2, 4, 6], // Diagonals
+          [2, 4, 6],
         ];
         for (const combo of winningCombinations) {
           const [a, b, c] = combo;
@@ -261,13 +269,13 @@
             gameState[a] === gameState[b] &&
             gameState[a] === gameState[c]
           ) {
-            return gameState[a]; // Returns 'X' or 'O' as the winner
+            return gameState[a];
           }
         }
-        if (!gameState.includes("")) return "draw"; // All cells filled, it's a draw
-        return null; // No winner yet
+        if (!gameState.includes("")) return "draw";
+        return null;
       }
-      // Event listeners
+
       createRoomBtn.addEventListener("click", createRoom);
       joinRoomBtn.addEventListener("click", joinRoom);
       resetBtn.addEventListener("click", resetGame);
