@@ -52,7 +52,8 @@
         gap: 10px;
         justify-content: center;
       }
-      .room-id-input {
+      .room-id-input,
+      .player-name-input {
         padding: 8px;
         width: 200px;
         border-radius: 5px;
@@ -66,15 +67,14 @@
       <input
         type="text"
         id="playerNameInput"
-        class="room-id-input"
+        class="player-name-input"
         placeholder="Enter Your Name"
       />
       <input
         type="text"
         id="roomIdInput"
         class="room-id-input"
-        placeholder="Your Room ID"
-        
+        placeholder="Enter Room ID"
       />
       <button class="reset-btn" id="createRoomBtn">Create Room</button>
       <button class="reset-btn" id="joinRoomBtn">Join Room</button>
@@ -95,7 +95,6 @@
       Reset Game
     </button>
     <script>
-      // Firebase configuration
       const firebaseConfig = {
         apiKey: "AIzaSyAVAmm17IuUzHVSlRoifBbkUR1M6NcvfbU",
         authDomain: "tictactoe-30c55.firebaseapp.com",
@@ -105,6 +104,7 @@
         appId: "1:1082947450155:web:bea75a105a56dbc89f816e",
         measurementId: "G-48VYS0G4W6",
       };
+
       firebase.initializeApp(firebaseConfig);
       const db = firebase.firestore();
 
@@ -113,9 +113,11 @@
       let currentPlayer = "X";
       let gameActive = false;
       let gameState = ["", "", "", "", "", "", "", "", ""];
+      let opponentName = null;
+      let connectionTimer;
 
-      const roomIdInput = document.getElementById("roomIdInput");
       const playerNameInput = document.getElementById("playerNameInput");
+      const roomIdInput = document.getElementById("roomIdInput");
       const createRoomBtn = document.getElementById("createRoomBtn");
       const joinRoomBtn = document.getElementById("joinRoomBtn");
       const resetBtn = document.getElementById("resetBtn");
@@ -125,34 +127,32 @@
       async function createRoom() {
         const playerName = playerNameInput.value.trim();
         if (!playerName) {
-          status.textContent = "Please enter your name to create a room.";
+          alert("Enter your name to create a room.");
           return;
         }
         const roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
         playerRole = "X";
         currentPlayer = "X";
-        await db
-          .collection("games")
-          .doc(roomId)
-          .set({
-            gameState: ["", "", "", "", "", "", "", "", ""],
-            currentPlayer: "X",
-            status: "waiting",
-            winner: null,
-            gameActive: true,
-            playerX: playerName,
-            playerO: null,
-          });
-        setupRoom(roomId);
-        status.textContent = `Room ID: ${roomId} - Waiting for player...`;
+        await db.collection("games").doc(roomId).set({
+          gameState: ["", "", "", "", "", "", "", "", ""],
+          currentPlayer: "X",
+          status: "waiting",
+          winner: null,
+          playerX: playerName,
+          playerO: null,
+          gameActive: true,
+        });
+        setupRoom(roomId, playerName);
+        status.textContent = `Room ID: ${roomId} - Waiting for opponent...`;
+        startConnectionTimer(roomId);
         roomIdInput.value = roomId;
       }
 
       async function joinRoom() {
-        const roomId = roomIdInput.value.trim().toUpperCase();
         const playerName = playerNameInput.value.trim();
-        if (!playerName) {
-          status.textContent = "Please enter your name to join a room.";
+        const roomId = roomIdInput.value.trim().toUpperCase();
+        if (!playerName || !roomId) {
+          alert("Enter your name and room ID to join.");
           return;
         }
         const roomRef = db.collection("games").doc(roomId);
@@ -167,49 +167,28 @@
           return;
         }
         playerRole = "O";
-        setupRoom(roomId);
-        await roomRef.update({ status: "playing", playerO: playerName });
-        status.textContent = `Room ID: ${roomId} - Game started!`;
+        await roomRef.update({
+          playerO: playerName,
+          status: "playing",
+        });
+        setupRoom(roomId, playerName);
       }
 
-      function setupRoom(roomId) {
+      function setupRoom(roomId, playerName) {
         currentRoom = db.collection("games").doc(roomId);
         gameActive = true;
         resetBtn.style.display = "block";
-        status.textContent = `Room ID: ${roomId}`;
         currentRoom.onSnapshot((doc) => {
           const data = doc.data();
           if (!data) return;
+
           gameState = data.gameState;
           currentPlayer = data.currentPlayer;
-          gameActive = data.gameActive !== undefined ? data.gameActive : false;
+          opponentName =
+            playerRole === "X" ? data.playerO : data.playerX || "Opponent";
           updateBoard();
           updateStatus(data);
-          cells.forEach((cell) => {
-            const index = parseInt(cell.getAttribute("data-cell-index"));
-            cell.style.cursor =
-              gameActive &&
-              currentPlayer === playerRole &&
-              gameState[index] === ""
-                ? "pointer"
-                : "not-allowed";
-          });
         });
-      }
-
-      async function handleCellClick(e) {
-        if (!gameActive || currentPlayer !== playerRole) return;
-        const cellIndex = parseInt(e.target.getAttribute("data-cell-index"));
-        if (gameState[cellIndex] !== "") return;
-        const newGameState = [...gameState];
-        newGameState[cellIndex] = playerRole;
-        const winner = checkWinner(newGameState);
-        await currentRoom.update({
-          gameState: newGameState,
-          currentPlayer: currentPlayer === "X" ? "O" : "X",
-          winner: winner,
-        });
-        if (winner) gameActive = false;
       }
 
       function updateBoard() {
@@ -219,67 +198,55 @@
       }
 
       function updateStatus(data) {
-        const playerXName = data.playerX || "Player X";
-        const playerOName = data.playerO || "Player O";
-
-        if (data.winner) {
-          status.textContent =
-            data.winner === "draw"
-              ? "Game ended in a draw!"
-              : `Player ${
-                  data.winner === "X" ? playerXName : playerOName
-                } wins!`;
-          gameActive = false;
-        } else {
-          status.textContent =
-            currentPlayer === playerRole
-              ? `Your turn (${playerRole === "X" ? playerXName : playerOName})`
-              : `Opponent's turn (${
-                  currentPlayer === "X" ? playerXName : playerOName
-                })`;
+        if (data.status === "waiting") {
+          status.textContent = `Waiting for opponent...`;
+        } else if (data.status === "playing") {
+          clearTimeout(connectionTimer); // Stop the timer when opponent joins
+          status.textContent = `Connected to ${opponentName}! ${
+            currentPlayer === playerRole ? "Your turn" : `${opponentName}'s turn`
+          }`;
         }
       }
 
-      async function resetGame() {
-        await currentRoom.update({
-          gameState: ["", "", "", "", "", "", "", "", ""],
-          currentPlayer: "X",
-          winner: null,
-          gameActive: true,
-        });
-        gameActive = true;
-        status.textContent = `Room ID: ${currentRoom.id} - Game reset!`;
-      }
-
-      function checkWinner(gameState) {
-        const winningCombinations = [
-          [0, 1, 2],
-          [3, 4, 5],
-          [6, 7, 8],
-          [0, 3, 6],
-          [1, 4, 7],
-          [2, 5, 8],
-          [0, 4, 8],
-          [2, 4, 6],
-        ];
-        for (const combo of winningCombinations) {
-          const [a, b, c] = combo;
-          if (
-            gameState[a] &&
-            gameState[a] === gameState[b] &&
-            gameState[a] === gameState[c]
-          ) {
-            return gameState[a];
+      function startConnectionTimer(roomId) {
+        let timer = 60; // 1 minute
+        connectionTimer = setInterval(async () => {
+          if (timer <= 0) {
+            clearInterval(connectionTimer);
+            await db.collection("games").doc(roomId).delete();
+            status.textContent = "Opponent did not join. Room reset!";
+            resetBtn.style.display = "none";
+          } else {
+            status.textContent = `Waiting for opponent... ${timer--}s`;
           }
-        }
-        if (!gameState.includes("")) return "draw";
-        return null;
+        }, 1000);
       }
 
       createRoomBtn.addEventListener("click", createRoom);
       joinRoomBtn.addEventListener("click", joinRoom);
-      resetBtn.addEventListener("click", resetGame);
-      cells.forEach((cell) => cell.addEventListener("click", handleCellClick));
+      resetBtn.addEventListener("click", () => {
+        if (currentRoom) {
+          currentRoom.update({
+            gameState: ["", "", "", "", "", "", "", "", ""],
+            currentPlayer: "X",
+            winner: null,
+            status: "playing",
+          });
+        }
+      });
+      cells.forEach((cell) =>
+        cell.addEventListener("click", async (e) => {
+          if (!gameActive || currentPlayer !== playerRole) return;
+          const cellIndex = parseInt(e.target.getAttribute("data-cell-index"));
+          if (gameState[cellIndex] !== "") return;
+          const newGameState = [...gameState];
+          newGameState[cellIndex] = playerRole;
+          await currentRoom.update({
+            gameState: newGameState,
+            currentPlayer: currentPlayer === "X" ? "O" : "X",
+          });
+        })
+      );
     </script>
   </body>
 </html>
