@@ -36,6 +36,14 @@
         margin: 20px 0;
         font-size: 18px;
       }
+      .winning-line {
+        position: absolute;
+        background-color: red;
+        height: 5px;
+        width: 0;
+        transition: width 0.3s ease-in-out;
+      }
+
       .btnGroup {
         display: flex;
         column-gap: 2px;
@@ -107,6 +115,8 @@
         <button class="reset-btn" id="joinRoomBtn">Join Room</button>
       </div>
     </div>
+    <div id="winningLine" class="winning-line"></div>
+
     <div class="game-board" id="board">
       <div class="cell" data-cell-index="0"></div>
       <div class="cell" data-cell-index="1"></div>
@@ -302,6 +312,7 @@
             gameState[a] === gameState[b] &&
             gameState[a] === gameState[c]
           ) {
+            // drawWinningLine(combo);
             return gameState[a]; // Returns 'X' or 'O' as the winner
           }
         }
@@ -329,6 +340,31 @@
 
         // Status message for resetting player
         status.textContent = `Room ID: ${currentRoom.id} - Game reset!`;
+        document.getElementById("winningLine").style.width = "0";
+      }
+
+      function drawWinningLine(combo) {
+        const board = document.querySelector(".game-board");
+        const cells = document.querySelectorAll(".cell");
+        const line = document.getElementById("winningLine");
+
+        const cellRects = combo.map((index) =>
+          cells[index].getBoundingClientRect()
+        );
+        const boardRect = board.getBoundingClientRect();
+
+        const x1 = cellRects[0].left + cellRects[0].width / 2;
+        const y1 = cellRects[0].top + cellRects[0].height / 2;
+        const x2 = cellRects[2].left + cellRects[2].width / 2;
+        const y2 = cellRects[2].top + cellRects[2].height / 2;
+
+        const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
+        const distance = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+
+        line.style.width = `${distance}px`;
+        line.style.transform = `rotate(${angle}deg)`;
+        line.style.left = `${x1 - boardRect.left}px`;
+        line.style.top = `${y1 - boardRect.top}px`;
       }
 
       createRoomBtn.addEventListener("click", createRoom);
